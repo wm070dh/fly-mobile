@@ -1,0 +1,149 @@
+local player = game.Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local replicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Create a RemoteEvent for flying control
+local flyEvent = Instance.new("RemoteEvent")
+flyEvent.Name = "FlyEvent"
+flyEvent.Parent = replicatedStorage
+
+-- Creating a simple GUI for mobile
+local screenGui = Instance.new("ScreenGui")
+local flyButton = Instance.new("TextButton")
+local speedFrame = Instance.new("Frame")
+local speedButton = Instance.new("TextButton")
+local speedLabel = Instance.new("TextLabel")
+
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Fly Button Setup
+flyButton.Size = UDim2.new(0, 100, 0, 50)
+flyButton.Position = UDim2.new(0.5, -50, 0.9, -25)
+flyButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+flyButton.TextColor3 = Color3.new(1, 1, 1)
+flyButton.Text = "Toggle Fly"
+flyButton.Parent = screenGui
+
+-- Speed Frame Setup
+speedFrame.Size = UDim2.new(0, 200, 0, 100)
+speedFrame.Position = UDim2.new(0.5, -100, 0.8, -50)
+speedFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+speedFrame.Parent = screenGui
+
+-- Speed Label Setup
+speedLabel.Size = UDim2.new(1, 0, 0.5, 0)
+speedLabel.Position = UDim2.new(0, 0, 0, 0)
+speedLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+speedLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
+speedLabel.Text = "Speed: 50"
+speedLabel.Parent = speedFrame
+
+-- Speed Button Setup
+speedButton.Size = UDim2.new(1, 0, 0.5, 0)
+speedButton.Position = UDim2.new(0, 0, 0.5, 0)
+speedButton.BackgroundColor3 = Color3.fromRGB(0, 100, 255)
+speedButton.TextColor3 = Color3.new(1, 1, 1)
+speedButton.Text = "Adjust Speed"
+speedButton.Parent = speedFrame
+
+local flying = false
+local speed = 50 -- Default speed
+
+-- Function to fly the character
+local function flyCharacter()
+    local character = player.Character or player.CharacterAdded:Wait()
+    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+    
+    local bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+    bodyVelocity.Parent = humanoidRootPart
+
+    local bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.MaxTorque = Vector3.new(4000, 4000, 4000)
+    bodyGyro.P = 3000
+    bodyGyro.Parent = humanoidRootPart
+
+    while flying do
+        local moveDirection = Vector3.new()
+        
+        -- Check for input and set direction
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            moveDirection = moveDirection + humanoidRootPart.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            moveDirection = moveDirection - humanoidRootPart.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            moveDirection = moveDirection - humanoidRootPart.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            moveDirection = moveDirection + humanoidRootPart.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            moveDirection = moveDirection + Vector3.new(0, 1, 0) -- Fly Up
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            moveDirection = moveDirection - Vector3.new(0, 1, 0) -- Fly Down
+        end
+
+        bodyVelocity.Velocity = moveDirection.Unit * speed
+        bodyGyro.CFrame = humanoidRootPart.CFrame
+        
+        wait()
+    end
+    
+    bodyVelocity:Destroy()
+    bodyGyro:Destroy()
+end
+
+-- Toggle flying on button click
+flyButton.MouseButton1Click:Connect(function()
+    flying = not flying
+    flyEvent:FireServer(flying) -- Notify server to toggle fly
+end)
+
+-- Adjusting speed functionality
+speedButton.MouseButton1Click:Connect(function()
+    speed = speed + 10 -- Increase speed by 10 each click
+    speedLabel.Text = "Speed: " .. speed
+end)
+
+-- Allowing buttons to be draggable
+local function makeDraggable(frame)
+    local dragToggle = nil
+    local dragStart = nil
+    local startPos = nil
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragToggle = true
+            dragStart = input.Position
+            startPos = frame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragToggle = false
+                end
+            end)
+        end
+    end)
+
+    game:GetService("RunService").RenderStepped:Connect(function()
+        if dragToggle then
+            local delta = UserInputService:GetMouseLocation() - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale + delta.X / frame.AbsoluteSize.X, startPos.X.Offset, startPos.Y.Scale + delta.Y / frame.AbsoluteSize.Y, startPos.Y.Offset)
+        end
+    end)
+end
+
+makeDraggable(flyButton)
+makeDraggable(speedFrame)
+
+-- Server-Side Logic (This should be added in a separate Script in ServerScriptService)
+game.ReplicatedStorage.FlyEvent.OnServerEvent:Connect(function(player, toggle)
+    player:SetAttribute("Flying", toggle)
+    
+    if toggle then
+        flyCharacter()
+    end
+end)
